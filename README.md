@@ -1,6 +1,6 @@
 # stmtparser.my
 
-Banks give you a PDF. You need data.
+Banks in Malaysia give you a PDF. You need data.
 
 Every statement downloaded from Maybank or Touch 'n Go ends up as a locked-down
 PDF, the format that was never meant to be analysed, tracked, or imported into
@@ -51,7 +51,7 @@ For each input PDF, `stmtparser` writes a folder containing two files:
   {
     "<section-name>": {
       "columns": ["Date", "Status", "..."],
-      "rows": [{"Date": "...", "Status": "...", "...": "..."}]
+      "rows": [{ "Date": "...", "Status": "...", "...": "..." }]
     }
   }
   ```
@@ -84,3 +84,7 @@ synthetic transaction dated at the statement period end.
 2. Register an instance in `REGISTRY` in `parsers/__init__.py`.
 
 Both the CLI and the format dispatcher pick the new parser up automatically.
+
+## TODOs
+
+- [ ] Replace the personal PDFs in `tests/fixtures/` with shareable synthetic fixtures (one per parser) and commit them. Then rewrite the test suite around them with explicit per-fixture assertions (known opening/closing pair for the Savings reconciliation check, a CC continuation line, a TnG GO+ sweep + Daily Earnings + DuitNow row), instead of the current glob-and-skip-if-empty pattern that runs almost nothing on a clean checkout.
