@@ -1,0 +1,23 @@
+# Personal data and generated artifacts
+.local/
+
+# Personal config
+config.yaml
+
+# Personal PDFs sitting in fixtures/ until we have synthetic ones to commit.
+# Drop this rule when tests/fixtures/ becomes git-tracked.
+tests/fixtures/
+
+# Archived v1 prototype (kept locally for reference, not shipped)
+archived/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.ty_cache/
+dist/
+build/
