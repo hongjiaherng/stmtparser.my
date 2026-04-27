@@ -25,7 +25,6 @@ class Transaction:
     date: date
     notes: str
     amount: float  # signed: + inflow, - outflow
-    source: str
 
     def as_row(self) -> dict[str, str]:
         return {

@@ -123,7 +123,6 @@ def _parse_date(raw: str) -> date:
 
 class MaybankSavingsParser(StatementParser):
     name = "maybank_savings"
-    source = "Maybank Personal Saver"
 
     def detect(self, first_page_text: str) -> bool:
         haystack = first_page_text.upper()
@@ -261,6 +260,5 @@ class MaybankSavingsParser(StatementParser):
                     date=datetime.strptime(date_str, "%Y-%m-%d").date(),
                     notes=notes,
                     amount=float(amount),
-                    source=self.source,
                 )
             )

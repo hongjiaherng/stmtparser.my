@@ -308,7 +308,6 @@ def _finalize_row(cells: dict[str, list[str]], section: str) -> dict[str, object
 
 class TngParser(StatementParser):
     name = "tng"
-    source = "TNG eWallet"
 
     def detect(self, first_page_text: str) -> bool:
         haystack = first_page_text.upper()
@@ -416,7 +415,6 @@ class TngParser(StatementParser):
                             f"{first} to {last})"
                         ),
                         amount=round(total, 2),
-                        source=self.source,
                     )
                 )
 
@@ -439,4 +437,4 @@ class TngParser(StatementParser):
                 f"Unknown transaction type {tx_type!r} for {tx_date}; treating as outflow."
             )
         notes = " | ".join(p for p in (tx_type, description_one_line) if p) or "(no description)"
-        return Transaction(date=tx_date, notes=notes, amount=amount, source=self.source)
+        return Transaction(date=tx_date, notes=notes, amount=amount)

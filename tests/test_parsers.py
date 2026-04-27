@@ -44,7 +44,6 @@ def test_maybank_savings_reconciles(pdf: Path) -> None:
     )
     assert r.warnings == [], f"unexpected warnings: {r.warnings}"
     for tx in r.transactions:
-        assert tx.source == "Maybank Personal Saver"
         assert tx.notes
 
 
@@ -53,7 +52,6 @@ def test_maybank_cc_basic(pdf: Path) -> None:
     r = maybank_cc.parse(pdf)
     assert r.transactions, "no transactions parsed"
     for tx in r.transactions:
-        assert tx.source == "Maybank Credit Card"
         assert tx.notes
 
 
@@ -63,7 +61,6 @@ def test_tng_basic(pdf: Path) -> None:
     assert r.transactions, "no transactions parsed"
     assert r.warnings == [], f"unexpected warnings: {r.warnings}"
     for tx in r.transactions:
-        assert tx.source == "TNG eWallet"
         assert tx.notes
         # GO+ sweep rows are filtered out; the only legitimate "GO+" mention
         # is the aggregated Daily Earnings synthetic row.

@@ -117,7 +117,6 @@ def _maybe_statement_date(day: str | int, month_abbr: str, year: str | int) -> d
 
 class MaybankCCParser(StatementParser):
     name = "maybank_cc"
-    source = "Maybank Credit Card"
 
     def detect(self, first_page_text: str) -> bool:
         haystack = first_page_text.upper()
@@ -235,6 +234,5 @@ class MaybankCCParser(StatementParser):
                     date=datetime.strptime(txn_date_str, "%Y-%m-%d").date(),
                     notes=notes,
                     amount=float(amount),
-                    source=self.source,
                 )
             )

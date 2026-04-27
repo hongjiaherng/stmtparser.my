@@ -18,7 +18,7 @@ stay in stage 1, opinionated transformations stay in stage 2).
 Adding a new parser:
 
 1. Create a module under ``stmt_parser.parsers`` with a subclass that sets
-   ``name`` and ``source`` as class attributes and implements ``detect()``,
+   ``name`` as a class attribute and implements ``detect()``,
    ``extract_raw()``, and ``normalize()``.
 2. Instantiate it in ``parsers/__init__.py`` and add to ``REGISTRY``.
 """
@@ -32,9 +32,6 @@ from ..transactions import ParseResult
 class StatementParser(ABC):
     #: Registry key, also used in CLI's ``--type`` flag. Lowercase, snake_case.
     name: str
-    #: Generic account label (bank product name) written into the normalized
-    #: ``Source`` column. Must NOT be tailored to any specific budget app.
-    source: str
 
     @abstractmethod
     def detect(self, first_page_text: str) -> bool:
