@@ -11,6 +11,14 @@ This tool does that work for you.
 `stmtparser.my` pulls the transaction rows out of Malaysian bank and e-wallet PDF
 statements and writes them as clean, structured files you can actually use.
 
+## Why this exists
+
+I budget with [Actual](https://actualbudget.org/), which only syncs transactions
+directly from European, US, and Brazilian banks. For Malaysian accounts the only
+option is keying every line in by hand. This tool turns the PDF statement into a
+CSV that imports straight into Actual (or any other budgeting tool), so the
+"manually retype every transaction" step goes away.
+
 ## Supported statements
 
 - Maybank Personal Saver (savings account)
