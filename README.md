@@ -23,7 +23,7 @@ Requires [uv](https://docs.astral.sh/uv/) (`winget install --id=astral-sh.uv` on
 Install `stmtparser` as a global tool, straight from the GitHub repo:
 
 ```bash
-uv tool install --from git+https://github.com/hongjiaherng/stmtparser.my stmtparser
+uv tool install git+https://github.com/hongjiaherng/stmtparser.my
 ```
 
 This drops a `stmtparser` executable on your `PATH`. No need to clone the repo or manage a venv. Run from anywhere:
@@ -41,13 +41,13 @@ stmtparser --version
 To upgrade later:
 
 ```bash
-uv tool upgrade stmtparser
+uv tool upgrade stmtparser-my
 ```
 
 To pin a specific release (recommended for stability):
 
 ```bash
-uv tool install --reinstall --from git+https://github.com/hongjiaherng/stmtparser.my@v0.1.0 stmtparser
+uv tool install --reinstall git+https://github.com/hongjiaherng/stmtparser.my@v0.1.0
 ```
 
 See [CHANGELOG.md](CHANGELOG.md) for what changed between releases.
@@ -55,7 +55,7 @@ See [CHANGELOG.md](CHANGELOG.md) for what changed between releases.
 To uninstall:
 
 ```bash
-uv tool uninstall stmtparser
+uv tool uninstall stmtparser-my
 ```
 
 ## Usage

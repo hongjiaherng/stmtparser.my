@@ -51,7 +51,7 @@ gh release create v0.1.1 --title "v0.1.1" --notes-from-tag
 ## Smoke test
 
 ```bash
-uv tool install --reinstall --from git+https://github.com/hongjiaherng/stmtparser.my@v0.1.1 stmtparser
+uv tool install --reinstall git+https://github.com/hongjiaherng/stmtparser.my@v0.1.1
 stmtparser --version
 ```
 
