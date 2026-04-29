@@ -8,6 +8,11 @@ authors = [{ name = "hongjiaherng", email = "jiaherng2001@gmail.com" }]
 requires-python = ">=3.12"
 dependencies = ["pdfplumber>=0.11.9"]
 
+[project.urls]
+Homepage = "https://github.com/hongjiaherng/stmtparser.my"
+Repository = "https://github.com/hongjiaherng/stmtparser.my"
+Issues = "https://github.com/hongjiaherng/stmtparser.my/issues"
+
 [project.scripts]
 stmtparser = "stmtparser_my.cli:main"
 

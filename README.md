@@ -16,24 +16,61 @@ I budget with [Actual](https://actualbudget.org/), which only syncs transactions
 - Maybank Credit Card
 - Touch 'n Go eWallet (wallet + GO+ sections)
 
-## Quick start
+## Install
+
+Requires [uv](https://docs.astral.sh/uv/) (`winget install --id=astral-sh.uv` on Windows, `brew install uv` on macOS, or [the curl script](https://docs.astral.sh/uv/getting-started/installation/) elsewhere).
+
+Install `stmtparser` as a global tool, straight from the GitHub repo:
 
 ```bash
-uv sync
+uv tool install --from git+https://github.com/hongjiaherng/stmtparser.my stmtparser
+```
 
+This drops a `stmtparser` executable on your `PATH`. No need to clone the repo or manage a venv. Run from anywhere:
+
+```bash
+stmtparser path/to/statement.pdf
+```
+
+To upgrade later:
+
+```bash
+uv tool upgrade stmtparser
+```
+
+To uninstall:
+
+```bash
+uv tool uninstall stmtparser
+```
+
+## Usage
+
+```bash
 # Parse one or more PDFs. Output folder is created in the current directory.
-uv run stmtparser path/to/statement.pdf
-
-# Try it on a redacted demo statement shipped with the repo:
-uv run stmtparser tests/fixtures/maybank_savings_demo.pdf -o out/
+stmtparser path/to/statement.pdf
 
 # Force a specific parser if auto-detect fails:
-uv run stmtparser path/to/file.pdf --type maybank_savings
+stmtparser path/to/file.pdf --type maybank_savings
 
 # Write output to a specific directory:
-uv run stmtparser path/to/file.pdf -o path/to/output
+stmtparser path/to/file.pdf -o path/to/output
 
-# Quality for source code
+# Process multiple PDFs in one go:
+stmtparser path/to/jan.pdf path/to/feb.pdf path/to/mar.pdf -o out/
+```
+
+## Develop locally
+
+```bash
+git clone https://github.com/hongjiaherng/stmtparser.my
+cd stmtparser.my
+uv sync
+
+# Run from the source tree without installing:
+uv run stmtparser tests/fixtures/maybank_savings_demo.pdf -o out/
+
+# Quality checks
 uv run ruff check
 uv run ty check
 uv run pytest
