@@ -32,11 +32,25 @@ This drops a `stmtparser` executable on your `PATH`. No need to clone the repo o
 stmtparser path/to/statement.pdf
 ```
 
+Check the installed version any time:
+
+```bash
+stmtparser --version
+```
+
 To upgrade later:
 
 ```bash
 uv tool upgrade stmtparser
 ```
+
+To pin a specific release (recommended for stability):
+
+```bash
+uv tool install --reinstall --from git+https://github.com/hongjiaherng/stmtparser.my@v0.1.0 stmtparser
+```
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed between releases.
 
 To uninstall:
 

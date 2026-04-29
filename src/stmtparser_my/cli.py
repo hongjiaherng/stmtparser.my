@@ -5,6 +5,7 @@ import re
 import shutil
 import sys
 from collections.abc import Sequence
+from importlib.metadata import version
 from pathlib import Path
 
 from stmtparser_my.detect import UNKNOWN, detect_format
@@ -76,6 +77,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             "`raw.json` (mirror of the PDF table, sections keyed by name).\n"
             f"Currently supports: {', '.join(REGISTRY)}."
         ),
+    )
+    parser.add_argument(
+        "-v",
+        "--version",
+        action="version",
+        version=f"stmtparser {version('stmtparser.my')}",
     )
     parser.add_argument("pdfs", nargs="+", type=Path, help="PDF file(s) to convert")
     parser.add_argument(
