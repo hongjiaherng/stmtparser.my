@@ -18,20 +18,26 @@ stay in stage 1, opinionated transformations stay in stage 2).
 Adding a new parser:
 
 1. Create a module under ``stmt_parser.parsers`` with a subclass that sets
-   ``name`` as a class attribute and implements ``detect()``,
-   ``extract_raw()``, and ``normalize()``.
+   ``name`` and ``label_prefix`` as class attributes and implements
+   ``detect()``, ``extract_raw()``, and ``normalize()``. Build
+   ``ParseResult.account_label`` by appending the account/card/wallet
+   identifier to ``self.label_prefix``.
 2. Instantiate it in ``parsers/__init__.py`` and add to ``REGISTRY``.
 """
 
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from ..transactions import ParseResult
+from stmtparser_my.transactions import ParseResult
 
 
 class StatementParser(ABC):
     #: Registry key, also used in CLI's ``--type`` flag. Lowercase, snake_case.
     name: str
+    #: Human-readable prefix for ``ParseResult.account_label`` (e.g.
+    #: ``"Maybank Personal Saver"``). Concrete parsers append the
+    #: account/card/wallet identifier to this when building the label.
+    label_prefix: str
 
     @abstractmethod
     def detect(self, first_page_text: str) -> bool:

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pdfplumber
 
-from .parsers import REGISTRY
+from stmtparser_my.parsers import REGISTRY
 
 UNKNOWN = "unknown"
 

@@ -30,7 +30,8 @@ from typing import cast
 
 import pdfplumber
 
-from ..transactions import ParseResult, RawSection, Transaction, collapse_whitespace
+from ..transactions import ParseResult, RawSection, Transaction
+from ._utils import parse_amount
 from .base import StatementParser
 
 RAW_COLUMNS: tuple[str, ...] = (
@@ -40,11 +41,19 @@ RAW_COLUMNS: tuple[str, ...] = (
     "Amount(RM)",
 )
 
-ACCOUNT_LABEL_PREFIX = "Maybank Credit Card"
-
 MONTH_NAME_TO_NUM: dict[str, int] = {
-    "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
-    "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12,
+    "JAN": 1,
+    "FEB": 2,
+    "MAR": 3,
+    "APR": 4,
+    "MAY": 5,
+    "JUN": 6,
+    "JUL": 7,
+    "AUG": 8,
+    "SEP": 9,
+    "OCT": 10,
+    "NOV": 11,
+    "DEC": 12,
 }
 
 STATEMENT_DATE_RE = re.compile(
@@ -87,9 +96,6 @@ IGNORE_LINE_RES: tuple[re.Pattern[str], ...] = tuple(
     )
 )
 
-def _parse_amount(raw: str) -> float:
-    return float(raw.replace(",", ""))
-
 
 def _resolve_year(month_day: str, statement_date: date) -> int:
     """If the txn month is later than the statement month, it is from last year."""
@@ -100,7 +106,9 @@ def _resolve_year(month_day: str, statement_date: date) -> int:
     return statement_date.year
 
 
-def _maybe_statement_date(day: str | int, month_abbr: str, year: str | int) -> date | None:
+def _maybe_statement_date(
+    day: str | int, month_abbr: str, year: str | int
+) -> date | None:
     try:
         d = int(day)
         mo = MONTH_NAME_TO_NUM[month_abbr.upper()]
@@ -117,12 +125,13 @@ def _maybe_statement_date(day: str | int, month_abbr: str, year: str | int) -> d
 
 class MaybankCCParser(StatementParser):
     name = "maybank_cc"
+    label_prefix = "Maybank Credit Card"
 
     def detect(self, first_page_text: str) -> bool:
-        haystack = first_page_text.upper()
+        haystack = first_page_text
         return (
             "STATEMENT OF CREDIT CARD ACCOUNT" in haystack
-            or "PENYATA AKAUN KAD KREDIT" in haystack
+            and "Malayan Banking Berhad (3813-K)" in haystack
         )
 
     def extract_raw(self, pdf_path: Path) -> ParseResult:
@@ -132,7 +141,12 @@ class MaybankCCParser(StatementParser):
 
         with pdfplumber.open(pdf_path) as pdf:
             for page in pdf.pages:
-                text = page.extract_text() or ""
+                # layout=True preserves horizontal whitespace based on each
+                # word's x-position, so the wide gap between merchant name
+                # and location (e.g. "SHOPEE MALAYSIA       KUALA LUMPUR MY")
+                # survives as multiple spaces — needed for the 2+-whitespace
+                # split in TX_LINE_RE handling below.
+                text = page.extract_text(layout=True) or ""
                 raw_full_parts.append(text)
                 full_lines.extend(text.splitlines())
         raw_full = "\n".join(raw_full_parts)
@@ -148,19 +162,23 @@ class MaybankCCParser(StatementParser):
 
         if statement_date is None:
             for sm in STATEMENT_DATE_RE.finditer(raw_full[:2000]):
-                statement_date = _maybe_statement_date(sm.group(1), sm.group(2), sm.group(3))
+                statement_date = _maybe_statement_date(
+                    sm.group(1), sm.group(2), sm.group(3)
+                )
                 if statement_date is not None:
                     break
 
         if statement_date is None:
+            # Unlike Savings/TnG, CC transaction lines have no year — we need
+            # the statement date to resolve year via `_resolve_year`. Failing
+            # fast is preferable to producing rows dated in the wrong year.
             raise ValueError(f"Could not find statement date in {pdf_path}")
 
         account = ""
         if m := ACCOUNT_RE.search(raw_full):
             account = m.group(1)
-        last4 = account.replace(" ", "")[-4:] if account else ""
-        label_suffix = f"*{last4}" if last4 else ""
-        label = f"{ACCOUNT_LABEL_PREFIX} {label_suffix}".strip()
+        card_number = account.replace(" ", "-") if account else ""
+        label = f"{self.label_prefix} {card_number}".strip()
 
         raw_section = RawSection(columns=RAW_COLUMNS)
         result = ParseResult(
@@ -191,15 +209,24 @@ class MaybankCCParser(StatementParser):
                     post_date = date(post_year, int(pm_part), int(pd_part))
                 except ValueError:
                     post_date = txn_date
-                desc = collapse_whitespace(m.group("desc"))
-                amount = _parse_amount(m.group("amount"))
+                # The PDF separates the merchant name from the location with a
+                # run of spaces (e.g. "SHOPEE MALAYSIA            KUALA LUMPUR MY").
+                # Split on 2+ whitespace so each visually-distinct segment is its
+                # own element in the description list, then collapse single-space
+                # runs within each segment.
+                desc_parts = [
+                    " ".join(p.split())
+                    for p in re.split(r"\s{4,}", m.group("desc"))
+                    if p.strip()
+                ]
+                amount = parse_amount(m.group("amount"))
                 is_credit = m.group("cr") is not None
                 signed = amount if is_credit else -amount
 
                 last_raw = {
                     "Posting Date": post_date.strftime("%Y-%m-%d"),
                     "Transaction Date": txn_date.strftime("%Y-%m-%d"),
-                    "Transaction Description": [desc],
+                    "Transaction Description": desc_parts,
                     "Amount(RM)": signed,
                 }
                 raw_section.rows.append(last_raw)
@@ -220,7 +247,9 @@ class MaybankCCParser(StatementParser):
             txn_date_str = row.get("Transaction Date")
             amount = row.get("Amount(RM)")
             desc_lines = row.get("Transaction Description")
-            if not isinstance(txn_date_str, str) or not isinstance(amount, (int, float)):
+            if not isinstance(txn_date_str, str) or not isinstance(
+                amount, (int, float)
+            ):
                 continue
             if isinstance(desc_lines, list):
                 notes_parts = [str(line) for line in desc_lines]
@@ -228,7 +257,7 @@ class MaybankCCParser(StatementParser):
                 notes_parts = [str(desc_lines)]
             else:
                 notes_parts = []
-            notes = collapse_whitespace(" | ".join(notes_parts))
+            notes = " ".join(" | ".join(notes_parts).split())
             result.transactions.append(
                 Transaction(
                     date=datetime.strptime(txn_date_str, "%Y-%m-%d").date(),

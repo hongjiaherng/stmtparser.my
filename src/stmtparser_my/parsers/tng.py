@@ -40,6 +40,7 @@ Pipeline
 
 import re
 from datetime import date, datetime
+from itertools import pairwise
 from pathlib import Path
 from typing import cast
 
@@ -52,7 +53,6 @@ from .base import StatementParser
 # word in _extract_pages so downstream code can use ``Word`` directly.
 Word = dict[str, object]
 
-ACCOUNT_LABEL_PREFIX = "TNG eWallet"
 MIN_AGGREGATED_DAILY_EARNINGS = 0.01
 
 DATE_PREFIX_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}$")
@@ -121,7 +121,7 @@ OUTFLOW_KEYWORDS: tuple[str, ...] = (
 _JOIN_RULE: dict[str, str] = {
     "Date": "first",
     "Status": "space",
-    "Transaction Type": "space",
+    "Transaction Type": "type",
     "Reference": "concat",
     "Description": "space",
     "Details": "concat",
@@ -189,6 +189,26 @@ def _parse_iso_date(s: str) -> date | None:
     return None
 
 
+_UPPER_TOKEN_RE = re.compile(r"^[A-Z_]+$")
+
+
+def _join_type_pieces(pieces: list[str]) -> str:
+    """Space-join transaction-type pieces, but concat adjacent all-caps tokens.
+
+    Why: types like ``DUITNOW_RECEIVEFROM`` line-wrap on the PDF as
+    ``DUITNOW_RECEI`` + ``VEFROM`` (both all-caps fragments of one token), and
+    must rejoin without a space. Multi-word labels like ``Receive from Wallet``
+    contain mixed-case words and rejoin with single spaces as before.
+    """
+    if not pieces:
+        return ""
+    out = pieces[0]
+    for prev, curr in pairwise(pieces):
+        sep = "" if _UPPER_TOKEN_RE.match(prev) and _UPPER_TOKEN_RE.match(curr) else " "
+        out += sep + curr
+    return out
+
+
 def _join_pieces(pieces: list[str], rule: str) -> str:
     if not pieces:
         return ""
@@ -196,6 +216,8 @@ def _join_pieces(pieces: list[str], rule: str) -> str:
         return pieces[0]
     if rule == "concat":
         return "".join(pieces)
+    if rule == "type":
+        return _join_type_pieces(pieces)
     return " ".join(pieces)
 
 
@@ -253,7 +275,10 @@ def _bin_row_into_columns(row_words: list[Word]) -> dict[str, str]:
 
 
 def _is_header_row(cells: dict[str, str]) -> bool:
-    return cells.get("Date", "").lower() == "date" and "status" in cells.get("Status", "").lower()
+    return (
+        cells.get("Date", "").lower() == "date"
+        and "status" in cells.get("Status", "").lower()
+    )
 
 
 def _row_text(cells: dict[str, str]) -> str:
@@ -278,9 +303,31 @@ def _is_metadata_or_footer(cells: dict[str, str]) -> bool:
     return any(m in text for m in markers)
 
 
+_TRAILING_DIGITS_RE = re.compile(r"(\d{8,})$")
+
+
+def _rebalance_type_reference(joined: dict[str, str]) -> None:
+    """Move overflow Reference digits out of Transaction Type.
+
+    The Reference column on TnG PDFs holds long IDs (30+ digits) that wrap
+    across multiple visual lines. When a wrapped line starts at an x-position
+    a few pixels left of the Reference column boundary, those digits get
+    binned into the Transaction Type column instead, producing values like
+    ``"Receive from Wallet20260408111"``. Peel the trailing digits back into
+    Reference. Real type strings never end in digits, so this is safe.
+    """
+    tt = joined.get("Transaction Type", "")
+    if m := _TRAILING_DIGITS_RE.search(tt):
+        joined["Transaction Type"] = tt[: m.start()].rstrip()
+        joined["Reference"] = m.group(1) + joined.get("Reference", "")
+
+
 def _finalize_row(cells: dict[str, list[str]], section: str) -> dict[str, object]:
     """Convert accumulated per-column word lists into the final raw row shape."""
-    joined = {col: _join_pieces(cells.get(col, []), _JOIN_RULE[col]) for col in COLUMN_NAMES}
+    joined = {
+        col: _join_pieces(cells.get(col, []), _JOIN_RULE[col]) for col in COLUMN_NAMES
+    }
+    _rebalance_type_reference(joined)
 
     parsed_date = _parse_iso_date(joined["Date"])
     out: dict[str, object] = {
@@ -308,20 +355,21 @@ def _finalize_row(cells: dict[str, list[str]], section: str) -> dict[str, object
 
 class TngParser(StatementParser):
     name = "tng"
+    label_prefix = "TNG eWallet"
 
     def detect(self, first_page_text: str) -> bool:
-        haystack = first_page_text.upper()
+        haystack = first_page_text
         return (
-            "TNG WALLET" in haystack
-            or "TOUCH 'N GO EWALLET" in haystack
-            or ("TOUCH" in haystack and "GO" in haystack and "WALLET" in haystack)
+            "TNG WALLET TRANSACTION HISTORY" in haystack
+            and "Registered Name" in haystack
+            and "Wallet ID" in haystack
         )
 
     def extract_raw(self, pdf_path: Path) -> ParseResult:
         pdf_path = Path(pdf_path)
         full_text = _full_text(pdf_path)
 
-        label = ACCOUNT_LABEL_PREFIX
+        label = self.label_prefix
         if m := WALLET_ID_RE.search(full_text):
             label = f"{label} {m.group(1)}"
 
@@ -436,5 +484,8 @@ class TngParser(StatementParser):
             warnings.append(
                 f"Unknown transaction type {tx_type!r} for {tx_date}; treating as outflow."
             )
-        notes = " | ".join(p for p in (tx_type, description_one_line) if p) or "(no description)"
+        notes = (
+            " | ".join(p for p in (tx_type, description_one_line) if p)
+            or "(no description)"
+        )
         return Transaction(date=tx_date, notes=notes, amount=amount)

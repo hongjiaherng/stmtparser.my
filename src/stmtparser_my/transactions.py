@@ -36,7 +36,7 @@ class Transaction:
 
 @dataclass
 class RawSection:
-    """A lossless mirror of one tabular section in the PDF.
+    """A hopefully lossless mirror of one tabular section in the PDF.
 
     ``rows`` are dicts keyed by column name. Cell value types vary by column:
 
@@ -66,7 +66,9 @@ class ParseResult:
     raw_sections: dict[str, RawSection] = field(default_factory=dict)
 
 
-def write_normalized_csv(transactions: Iterable[Transaction], output_path: Path) -> None:
+def write_normalized_csv(
+    transactions: Iterable[Transaction], output_path: Path
+) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=list(NORMALIZED_FIELDS))
@@ -96,14 +98,12 @@ def write_raw_json(sections: dict[str, RawSection], output_path: Path) -> None:
     payload = {
         key: {
             "columns": list(section.columns),
-            "rows": [{c: row.get(c, "") for c in section.columns} for row in section.rows],
+            "rows": [
+                {c: row.get(c, "") for c in section.columns} for row in section.rows
+            ],
         }
         for key, section in sections.items()
     }
     with output_path.open("w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
         f.write("\n")
-
-
-def collapse_whitespace(s: str) -> str:
-    return " ".join(s.split())

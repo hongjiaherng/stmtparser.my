@@ -2,13 +2,14 @@
 
 import argparse
 import re
+import shutil
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from .detect import UNKNOWN, detect_format
-from .parsers import REGISTRY
-from .transactions import ParseResult, write_normalized_csv, write_raw_json
+from stmtparser_my.detect import UNKNOWN, detect_format
+from stmtparser_my.parsers import REGISTRY
+from stmtparser_my.transactions import ParseResult, write_normalized_csv, write_raw_json
 
 DEFAULT_OUTPUT_DIR = Path(".")
 
@@ -25,20 +26,33 @@ def process_one(pdf: Path, output_root: Path, forced_type: str | None) -> ParseR
             f"Could not detect statement type for {pdf}. "
             f"Pass --type explicitly (one of: {', '.join(REGISTRY)})."
         )
-    if fmt not in REGISTRY:
-        raise ValueError(f"Unsupported type {fmt!r} for {pdf}")
 
     result = REGISTRY[fmt].parse(pdf)
 
-    label_part = _safe_filename(result.account_label) if result.account_label else "statement"
-    out_dir = output_root / f"{pdf.stem}__{label_part}"
+    label_part = (
+        _safe_filename(result.account_label) if result.account_label else "statement"
+    )
+    # Prefix with statement date (YYYYMMDD) so output folders sort
+    # chronologically. Fall back to the PDF stem when the parser couldn't
+    # extract a date.
+    date_part = (
+        result.statement_date.strftime("%Y%m%d")
+        if result.statement_date
+        else pdf.stem
+    )
+    out_dir = output_root / f"{date_part}__{label_part}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     write_normalized_csv(result.transactions, out_dir / "normalized.csv")
     if result.raw_sections:
         write_raw_json(result.raw_sections, out_dir / "raw.json")
+    # Keep the source PDF alongside its derived outputs so each folder is
+    # self-contained and re-parseable without hunting for the original.
+    shutil.copy2(pdf, out_dir / pdf.name)
 
-    raw_summary = ", ".join(f"{k}={len(s.rows)}" for k, s in result.raw_sections.items())
+    raw_summary = ", ".join(
+        f"{k}={len(s.rows)}" for k, s in result.raw_sections.items()
+    )
     print(
         f"[{fmt}] {pdf.name}: {len(result.transactions)} normalized"
         + (f" | raw[{raw_summary}]" if raw_summary else "")
@@ -46,8 +60,7 @@ def process_one(pdf: Path, output_root: Path, forced_type: str | None) -> ParseR
     )
     if result.opening_balance is not None and result.closing_balance is not None:
         print(
-            f"   Balances: opening {result.opening_balance:.2f}, "
-            f"closing {result.closing_balance:.2f}"
+            f"   Balances: opening {result.opening_balance:.2f}, closing {result.closing_balance:.2f}"
         )
     for w in result.warnings:
         print(f"   ! {w}", file=sys.stderr)
@@ -59,8 +72,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         prog="stmtparser",
         description=(
             "Parse bank/wallet PDF statements. Each PDF produces a folder "
-            "containing normalized.csv (Date, Notes, Amount) and "
-            "raw.json (lossless mirror of the PDF table, sections keyed by name)."
+            "containing `normalized.csv` (Date, Notes, Amount) and "
+            "`raw.json` (mirror of the PDF table, sections keyed by name).\n"
+            f"Currently supports: {', '.join(REGISTRY)}."
         ),
     )
     parser.add_argument("pdfs", nargs="+", type=Path, help="PDF file(s) to convert")
@@ -94,7 +108,3 @@ def main(argv: Sequence[str] | None = None) -> int:
             failed += 1
 
     return 1 if failed else 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

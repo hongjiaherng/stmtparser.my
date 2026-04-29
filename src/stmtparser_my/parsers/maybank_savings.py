@@ -26,8 +26,9 @@ from pathlib import Path
 
 import pdfplumber
 
-from ..transactions import ParseResult, RawSection, Transaction, collapse_whitespace
-from .base import StatementParser
+from stmtparser_my.parsers._utils import parse_amount
+from stmtparser_my.parsers.base import StatementParser
+from stmtparser_my.transactions import ParseResult, RawSection, Transaction
 
 RAW_COLUMNS: tuple[str, ...] = (
     "ENTRY DATE",
@@ -35,8 +36,6 @@ RAW_COLUMNS: tuple[str, ...] = (
     "TRANSACTION AMOUNT",
     "STATEMENT BALANCE",
 )
-
-ACCOUNT_LABEL_PREFIX = "Maybank Personal Saver"
 
 TX_HEADER_RE = re.compile(
     r"""
@@ -54,14 +53,27 @@ TX_HEADER_RE = re.compile(
     re.VERBOSE,
 )
 
-ACCOUNT_NUMBER_RE = re.compile(r"\b(\d{6}-\d{6})\b")
-STATEMENT_DATE_RE = re.compile(r":\s*(\d{2}/\d{2}/\d{2})\s*$", re.MULTILINE)
-BEGINNING_BALANCE_RE = re.compile(r"BEGINNING\s+BALANCE\s+([\d,]+\.\d{2})", re.IGNORECASE)
-# Maybank uses both an ASCII colon and a CJK fullwidth colon in different statements.
-ENDING_BALANCE_RE = re.compile(
-    r"ENDING\s+BALANCE\s*[:：]\s*([\d,]+\.\d{2})",  # noqa: RUF001
-    re.IGNORECASE,
+# Account number: '戶號 : NNNNNN-NNNNNN' on one line, followed (a few lines
+# later) by the bilingual label 'ACCOUNT NUMBER' (printed on two lines in the
+# header). The label is required as a non-capturing anchor.
+ACCOUNT_NUMBER_RE = re.compile(
+    r"戶號\s*:\s*(\d{6}-\d{6}).*?ACCOUNT\s+NUMBER",
+    re.DOTALL,
 )
+
+# Statement date: '結單日期 : DD/MM/YY' on one line, followed (a few lines later)
+# by the bilingual label 'STATEMENT DATE'. The label is required as a
+# non-capturing anchor to disambiguate from any other DD/MM/YY that might
+# appear near '結單日期'.
+STATEMENT_DATE_RE = re.compile(
+    r"結單日期\s*:\s*(\d{2}/\d{2}/\d{2})(?!\d).*?STATEMENT\s+DATE",
+    re.DOTALL,
+)
+
+BEGINNING_BALANCE_RE = re.compile(
+    r"BEGINNING\s+BALANCE\s+([\d,]+\.\d{2})", re.IGNORECASE
+)
+ENDING_BALANCE_RE = re.compile(r"ENDING\s+BALANCE\s*:\s*([\d,]+\.\d{2})", re.IGNORECASE)
 
 NOISE_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     re.compile(p)
@@ -87,7 +99,10 @@ NOISE_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
         r"^TARIKH MASUK",
         r"^進支日期",
         r"^ENTRY DATE",
-        r"^MUKA/",
+        # Page marker prints as e.g. "000005 MUKA/ 頁/PAGE : 5" — the leading
+        # row number means we can't anchor to start of line.
+        r"MUKA/",
+        r"頁/PAGE",
         r"^TARIKH PENYATA",
         r"^STATEMENT DATE",
         r"^NOMBOR AKAUN",
@@ -113,24 +128,21 @@ def _is_noise(line: str) -> bool:
     return any(p.search(line) for p in NOISE_PATTERNS)
 
 
-def _parse_amount(raw: str) -> float:
-    return float(raw.replace(",", ""))
-
-
 def _parse_date(raw: str) -> date:
     return datetime.strptime(raw, "%d/%m/%y").date()
 
 
 class MaybankSavingsParser(StatementParser):
     name = "maybank_savings"
+    label_prefix = "Maybank Personal Saver"
 
     def detect(self, first_page_text: str) -> bool:
-        haystack = first_page_text.upper()
-        if "PERSONAL SAVER" in haystack and (
-            "MAYBANK" in haystack or "MALAYAN BANKING" in haystack
-        ):
-            return True
-        return "URUSNIAGA AKAUN" in haystack and "MALAYAN BANKING" in haystack
+        haystack = first_page_text
+        return bool(
+            "PERSONAL SAVER" in haystack
+            and "Malayan Banking Berhad (3813-K)" in haystack
+            and "URUSNIAGA AKAUN" in haystack
+        )
 
     def extract_raw(self, pdf_path: Path) -> ParseResult:
         pdf_path = Path(pdf_path)
@@ -155,13 +167,13 @@ class MaybankSavingsParser(StatementParser):
 
         opening_balance: float | None = None
         if m := BEGINNING_BALANCE_RE.search(raw_full):
-            opening_balance = _parse_amount(m.group(1))
+            opening_balance = parse_amount(m.group(1))
 
         closing_balance: float | None = None
         if m := ENDING_BALANCE_RE.search(raw_full):
-            closing_balance = _parse_amount(m.group(1))
+            closing_balance = parse_amount(m.group(1))
 
-        label = f"{ACCOUNT_LABEL_PREFIX} {account_no}".strip()
+        label = f"{self.label_prefix} {account_no}".strip()
         raw_section = RawSection(columns=RAW_COLUMNS)
         result = ParseResult(
             source_file=str(pdf_path),
@@ -181,11 +193,14 @@ class MaybankSavingsParser(StatementParser):
             if current_tx is None:
                 return
             head = current_tx["head_desc"].strip()
-            raw_desc_lines = [head, *(s.strip() for s in current_detail_lines if s.strip())]
-            amount = _parse_amount(current_tx["amount"])
+            raw_desc_lines = [
+                head,
+                *(s.strip() for s in current_detail_lines if s.strip()),
+            ]
+            amount = parse_amount(current_tx["amount"])
             if current_tx["sign"] == "-":
                 amount = -amount
-            balance = _parse_amount(current_tx["balance"])
+            balance = parse_amount(current_tx["balance"])
             tx_date = _parse_date(current_tx["date"])
 
             raw_section.rows.append(
@@ -252,9 +267,16 @@ class MaybankSavingsParser(StatementParser):
             if not isinstance(date_str, str) or not isinstance(amount, (int, float)):
                 continue
             if isinstance(desc_lines, list):
-                notes = collapse_whitespace(" ".join(str(p) for p in desc_lines))
+                # The first line is the generic transaction-type head
+                # (e.g. "IBK FUND TFR FR A/C", "SALE DEBIT") and adds no
+                # information when continuation lines exist. Drop it unless
+                # it's the only line (e.g. "CASH DEPOSIT" with no detail).
+                parts = desc_lines[1:] if len(desc_lines) > 1 else desc_lines
+                notes = " ".join(" ".join(str(p) for p in parts).split())
             else:
-                notes = collapse_whitespace(str(desc_lines or ""))
+                notes = (
+                    " ".join(str(desc_lines).split()) if desc_lines is not None else ""
+                )
             result.transactions.append(
                 Transaction(
                     date=datetime.strptime(date_str, "%Y-%m-%d").date(),

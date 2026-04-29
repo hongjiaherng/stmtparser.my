@@ -1,16 +1,12 @@
 [project]
 name = "stmtparser.my"
 version = "0.1.0"
-description = "Parse Malaysian bank/wallet PDF statements into normalized CSV and lossless JSON."
+description = "Parse Malaysian bank/wallet PDF statements into raw JSON then simplify the content into a CSV."
 readme = "README.md"
 license = { text = "MIT" }
-authors = [
-    { name = "hongjiaherng", email = "jiaherng2001@gmail.com" }
-]
+authors = [{ name = "hongjiaherng", email = "jiaherng2001@gmail.com" }]
 requires-python = ">=3.12"
-dependencies = [
-    "pdfplumber>=0.11.9",
-]
+dependencies = ["pdfplumber>=0.11.9"]
 
 [project.scripts]
 stmtparser = "stmtparser_my.cli:main"
@@ -20,27 +16,14 @@ requires = ["uv_build>=0.11.1,<0.12.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = [
-    "pytest>=9.0.3",
-    "ruff>=0.15.12",
-    "ty>=0.0.32",
-]
+dev = ["pytest>=9.0.3", "ruff>=0.15.12", "ty>=0.0.32"]
 
 [tool.ruff]
-line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
-extend-exclude = ["archived"]
 
 [tool.ruff.lint]
-select = [
-    "E", "F", "W",
-    "I",
-    "UP",
-    "B",
-    "SIM",
-    "RUF",
-]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 ignore = ["E501"]
 
 [tool.ruff.format]

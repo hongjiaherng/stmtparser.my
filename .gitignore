@@ -1,9 +1,6 @@
 # Personal data and generated artifacts
 .local/
-
-# Personal PDFs sitting in fixtures/ until we have synthetic ones to commit.
-# Drop this rule when tests/fixtures/ becomes git-tracked.
-tests/fixtures/
+temp/
 
 # Python
 __pycache__/
